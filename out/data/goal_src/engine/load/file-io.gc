@@ -19,27 +19,11 @@
 ;;  3). The C runtime constructs this type before anything is loaded. The sizes
 ;;     must be kept up to date there as well.
 
-(deftype file-stream (basic)
-  ((flags uint32  :offset-assert 4)
-   (mode  symbol  :offset-assert 8)
-   (name  string  :offset-assert 12)
-   (file  uint32  :offset-assert 16)
-   )
-  (:methods
-   (new (symbol type string symbol) _type_)
-   )
-  :method-count-assert 9
-  :size-assert         #x14
-  :flag-assert         #x900000014
-  )
 
 (defconstant SCE_SEEK_SET 0)
 (defconstant SCE_SEEK_CUR 1)
 (defconstant SCE_SEEK_END 2)
 
-(defmacro file-stream-valid? (fs)
-  `(>= (the-as int (-> ,fs file)) 0)
-  )
 
 (defmacro file-stream-tell (fs)
   `(file-stream-seek ,fs 0 SCE_SEEK_CUR)

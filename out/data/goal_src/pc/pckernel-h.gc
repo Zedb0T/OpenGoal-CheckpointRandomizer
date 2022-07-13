@@ -64,6 +64,24 @@
 ;;;; types and enums
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(define *pc-temp-string* (new 'global 'string 2048 (the-as string #f)))
+(define *pc-temp-string-1* (new 'global 'string 2048 (the-as string #f)))
+(deftype file-stream (basic)
+  ((flags uint32  :offset-assert 4)
+   (mode  symbol  :offset-assert 8)
+   (name  string  :offset-assert 12)
+   (file  uint32  :offset-assert 16)
+   )
+  (:methods
+   (new (symbol type string symbol) _type_)
+   )
+  :method-count-assert 9
+  :size-assert         #x14
+  :flag-assert         #x900000014
+  )
+  (defmacro file-stream-valid? (fs)
+  `(>= (the-as int (-> ,fs file)) 0)
+  )
 
 
 ;; graphics renderers
@@ -337,10 +355,13 @@
     (load-settings (_type_) int)
     )
   )
-
+    (define *pc-settings* (new 'global 'pc-settings))
 ;; All of the configuration for the PC port in GOAL. Access things from here!
 ;; Includes some methods to change parameters.
- 
+  
+
+
+
 (defmethod reset pc-settings ((obj pc-settings))
   "Set the default settings"
 
@@ -377,6 +398,477 @@
 
   (none))
 
+
+
+ (deftype randomizer-settings (basic)
+    ((version uint64) ;; version of this settings
+(os symbol) ;; windows, linux, macos
+(target-fps int16) ;; the target framerate of the game
+    (cells-needed-to-warp float);; number of cells needed to trigger a random checkpoint warp
+    
+    (checkpoint-randomizer? symbol) ;; enable Zed's checkpoint randomizer
+    ;; TODO - save/restore original settings (language/sound/etc)
+    )
+
+    (:methods
+     (new (symbol type) _type_)
+       (update (_type_) none)
+    (update-from-os (_type_) none)
+    (update-to-os (_type_) none)
+      (reset (_type_) none)
+      (read-from-file (_type_ string) symbol)
+      (commit-to-file (_type_) none)
+      (write-to-file (_type_ string) symbol)
+      (load-settings (_type_) int)
+      )
+    )
+(define *randomizer-settings* (the-as randomizer-settings #f))
+    (defmethod reset randomizer-settings ((obj randomizer-settings))
+  "Set the default settings"
+
+  ;(format #t "pc settings reset~%")
+
+  (set! (-> obj version) PC_KERNEL_VERSION)
+  #|
+
+  (set! (-> obj user) #f)
+  (set! (-> obj debug?) #f)
+  (set! (-> obj new-lb?) #f)
+  (set! (-> obj display-actor-bank) #f)
+  (set! (-> obj debug-pad-display) #f)
+  (set! (-> obj display-bug-report) #f)
+  (set! (-> obj display-heap-status) #f)
+  (set! (-> obj display-actor-counts) #f)
+  (set! (-> obj display-text-box) #f)
+  (set! (-> obj display-sha) *debug-segment*)
+  (set! (-> obj mood-override?) #f)
+  (set! (-> obj movie?) #f)
+  (set! (-> obj font-scale) 1.0)
+  (set! (-> obj aspect-custom-x) 4)
+  (set! (-> obj aspect-custom-y) 3)
+  (set! (-> obj discord-rpc?) #t)
+  (set! (-> obj cells-needed-to-warp) 1.0)
+  (set! (-> obj checkpoint-randomizer?) #t)
+  (set! (-> obj window-lock?) #t)
+
+  (reset-gfx obj)
+  (reset-audio obj)
+  (reset-input obj)
+  (reset-ps2 obj)
+  (reset-misc obj)
+  (reset-extra obj)
+|#
+  (none))
+(defmethod write-to-file randomizer-settings ((obj randomizer-settings) (filename string))
+  "write settings to a file"
+
+  (if (not filename)
+    (return #f))
+
+    (let ((file (new 'stack 'file-stream filename 'write)))
+    (if (not (file-stream-valid? file))
+      (return #f))
+
+    (format file "(settings #x~X~%" (-> *pc-settings* version))
+
+    (format file "  (fps ~D)~%" (-> obj target-fps))
+    (format file "  (cells-needed-to-warp ~F)~%" (the-as float(-> obj cells-needed-to-warp)))
+    (format file "  (Randomizer? ~A)~%" (-> obj checkpoint-randomizer?))
+  #|(format file "  (game-size ~D ~D)~%" (-> obj width) (-> obj height))
+    (format file "  (window-size ~D ~D)~%" (-> obj win-width) (-> obj win-height))
+    (format file "  (aspect ~D ~D)~%" (-> obj width) (-> obj height))
+    (format file "  (aspect-test ~D ~D)~%" (-> obj aspect-custom-x) (-> obj aspect-custom-y))
+    (format file "  (aspect-auto ~A)~%" (-> obj aspect-ratio-auto?))
+    (format file "  (aspect-game ~A)~%" (-> *setting-control* default aspect-ratio))
+    (format file "  (video-mode ~A)~%" (-> *setting-control* default video-mode))
+    (format file "  (display-mode ~A)~%" (-> obj display-mode))
+    (format file "  (letterbox ~A)~%" (-> obj letterbox?))
+    (format file "  (vsync ~A)~%" (-> obj vsync?))
+    (format file "  (font-scale ~f)~%" (-> obj font-scale))
+
+    (format file "  (audio-latency-ms ~D)~%" (-> obj audio-latency-ms))
+    (format file "  (audio-pan-override ~f)~%" (-> obj audio-pan-override))
+    (format file "  (audio-volume-override ~f)~%" (-> obj audio-volume-override))
+    (format file "  (audio-channel-nb ~D)~%" (-> obj audio-channel-nb))
+
+    (format file "  (gfx-renderer ~D)~%" (-> obj gfx-renderer))
+    (format file "  (gfx-resolution ~f)~%" (-> obj gfx-resolution))
+    (format file "  (gfx-anisotropy ~f)~%" (-> obj gfx-anisotropy))
+    (format file "  (shrub-dist-mod ~f)~%" (-> obj shrub-dist-mod))
+    (format file "  (lod-dist-mod ~f)~%" (-> obj lod-dist-mod))
+    (format file "  (lod-force-tfrag ~D)~%" (-> obj lod-force-tfrag))
+    (format file "  (lod-force-tie ~D)~%" (-> obj lod-force-tie))
+    (format file "  (lod-force-ocean ~D)~%" (-> obj lod-force-ocean))
+    (format file "  (lod-force-actor ~D)~%" (-> obj lod-force-actor))
+
+    (format file "  (stick-deadzone ~f)~%" (-> obj stick-deadzone))
+
+    (format file "  (ps2-read-speed? ~A)~%" (-> obj ps2-read-speed?))
+    (format file "  (ps2-parts? ~A)~%" (-> obj ps2-parts?))
+    (format file "  (ps2-music? ~A)~%" (-> obj ps2-music?))
+    (format file "  (ps2-se? ~A)~%" (-> obj ps2-se?))
+    (format file "  (ps2-hints? ~A)~%" (-> obj ps2-hints?))
+    (format file "  (ps2-lod-dist? ~A)~%" (-> obj ps2-lod-dist?))
+    (format file "  (music-fade? ~A)~%" (-> obj music-fade?))
+    (format file "  (use-vis? ~A)~%" (-> obj use-vis?))
+    (format file "  (skip-movies? ~A)~%" (-> obj skip-movies?))
+    (format file "  (discord-rpc? ~A)~%" (-> obj discord-rpc?))
+    (format file "  (first-camera-h-inverted? ~A)~%" (-> obj first-camera-h-inverted?))
+    (format file "  (first-camera-v-inverted? ~A)~%" (-> obj first-camera-v-inverted?))
+    (format file "  (third-camera-h-inverted? ~A)~%" (-> obj third-camera-h-inverted?))
+    (format file "  (third-camera-v-inverted? ~A)~%" (-> obj third-camera-v-inverted?))
+    (format file "  (money-starburst? ~A)~%" (-> obj money-starburst?))
+    (format file "  (force-actors? ~A)~%" (-> obj force-actors?))
+    (format file "  (extra-hud? ~A)~%" (-> obj extra-hud?))
+    (format file "  (music-fadein? ~A)~%" (-> obj music-fadein?))
+    (format file "  (music-fadeout? ~A)~%" (-> obj music-fadeout?))
+    (format file "  (subtitles? ~A)~%" (-> obj subtitles?))
+    (format file "  (hinttitles? ~A)~%" (-> obj hinttitles?))
+    (format file "  (subtitle-language ~D)~%" (-> obj subtitle-language))
+    (format file "  (subtitle-speaker ~A)~%" (-> obj subtitle-speaker?))
+
+    #|
+    (format file "  (scenes-seen")
+    (dotimes (i PC_SPOOL_LOG_LENGTH)
+      (if (zero? (mod i 16))
+        (format file "~%   ")
+        )
+      (format file " ~D" (-> obj scenes-seen i))
+      )
+    (format file "~%    )~%")
+    |#
+
+  #|(format file "  (secrets~%")
+    #|
+    (format file "    (art #x~X)~%" (-> obj secrets art))
+    (format file "    (hard-rats? ~A)~%" (-> obj secrets hard-rats?))
+    (format file "    (hero-mode? ~A)~%" (-> obj secrets hero-mode?))
+    (format file "    (hud-map? ~A)~%" (-> obj secrets hud-map?))
+    (format file "    (hud-counters? ~A)~%" (-> obj secrets hud-counters?))
+    (format file "    (hard-fish-hiscore ~D)~%" (-> obj secrets hard-fish-hiscore))
+    (format file "    (hard-rats-hiscore ~D)~%" (-> obj secrets hard-rats-hiscore))
+    (format file "    (hard-rats-hiwave ~D)~%" (-> obj secrets hard-rats-hiwave))
+    |#
+
+  #|  (format file "    (music~%")
+    (dotimes (i PC_MUSIC_LOG_LENGTH)
+      (if (-> obj secrets music i name)
+    (format file "      (~A #x~X)~%" (-> obj secrets music i name) (-> obj secrets music i flava-mask))
+    )
+      )
+
+    (format file "      )~%")
+
+    (format file "    )~%")
+|#
+    (format file "  )~%")
+    (file-stream-close file)
+    )
+
+  (format 0 "pc settings file write: ~A~%" filename)
+
+  #t
+  )
+
+
+  (defmethod commit-to-file randomizer-settings ((obj randomizer-settings))
+  "commits the current settings to the file"
+  ;; auto load settings if available
+
+  (format (clear *pc-temp-string-1*) "~S/Mods/randomizer-settings.gc" *pc-settings-folder*)
+  (pc-mkdir-file-path *pc-temp-string-1*)
+  (write-to-file obj *pc-temp-string-1*)
+  (none)) 
+
+(defmethod update-from-os randomizer-settings ((obj randomizer-settings))
+  "Update settings from the C kernel to GOAL."
+
+  (set! (-> obj os) (pc-get-os))
+
+
+
+
+  (none))
+
+(defmethod update-to-os randomizer-settings ((obj randomizer-settings))
+  "Update settings from GOAL to the C kernel."
+
+
+
+
+
+
+  (none))
+
+
+  (defmethod update randomizer-settings ((obj randomizer-settings))
+  "Update settings to/from PC kernel. Call this at the start of every frame.
+   This will update things like the aspect-ratio, which will be used for graphics code later."
+
+  (update-from-os obj)
+  (update-to-os obj)
+
+  #|(when (not (-> obj use-vis?))
+    (set! (-> *video-parms* relative-x-scale) (-> obj aspect-ratio-reciprocal))
+    (set! (-> *video-parms* relative-x-scale-reciprical) (-> obj aspect-ratio-scale))
+    (set! (-> *font-default-matrix* vector 0 x) (-> *video-parms* relative-x-scale))
+    )
+
+  (cond
+    ((-> obj force-actors?)
+      ;; kinda overkill.
+      (set! (-> *ACTOR-bank* birth-dist) (meters 10000))
+      (set! (-> *ACTOR-bank* pause-dist) (meters 10000))
+      (set! (-> *ACTOR-bank* birth-max) 1000)
+      )
+    ((> (-> *ACTOR-bank* birth-dist) (meters 220)) ;; the original caps at 220m, exceeding that means it was using our hacks
+      (set! (-> *ACTOR-bank* birth-dist) (meters 220))
+      (set! (-> *ACTOR-bank* pause-dist) (meters 220))
+      ))
+
+  ;; cheats.
+  (update-cheats obj)
+  ;; music.
+  (update-music-log obj)
+|#
+
+  (none))
+
+
+(deftype challenges-settings (basic)
+    ((version uint64) ;; version of this settings
+(os symbol) ;; windows, linux, macos
+(target-fps int16) ;; the target framerate of the game
+    (cells-needed-to-warp float);; number of cells needed to trigger a random checkpoint warp
+   
+    (checkpoint-randomizer? symbol) ;; enable Zed's checkpoint randomizer
+    ;; TODO - save/restore original settings (language/sound/etc)
+    )
+ 
+    (:methods
+     (new (symbol type) _type_)
+       (update (_type_) none)
+    (update-from-os (_type_) none)
+    (update-to-os (_type_) none)
+      (reset (_type_) none)
+      (read-from-file (_type_ string) symbol)
+      (commit-to-file (_type_) none)
+      (write-to-file (_type_ string) symbol)
+      (load-settings (_type_) int)
+      )
+    )
+ (define *challenges-settings* (the-as challenges-settings #f))
+    (defmethod reset challenges-settings ((obj challenges-settings))
+  "Set the default settings"
+ 
+  ;(format #t "pc settings reset~%")
+ 
+  (set! (-> obj version) PC_KERNEL_VERSION)
+  #|
+ 
+  (set! (-> obj user) #f)
+  (set! (-> obj debug?) #f)
+  (set! (-> obj new-lb?) #f)
+  (set! (-> obj display-actor-bank) #f)
+  (set! (-> obj debug-pad-display) #f)
+  (set! (-> obj display-bug-report) #f)
+  (set! (-> obj display-heap-status) #f)
+  (set! (-> obj display-actor-counts) #f)
+  (set! (-> obj display-text-box) #f)
+  (set! (-> obj display-sha) *debug-segment*)
+  (set! (-> obj mood-override?) #f)
+  (set! (-> obj movie?) #f)
+  (set! (-> obj font-scale) 1.0)
+  (set! (-> obj aspect-custom-x) 4)
+  (set! (-> obj aspect-custom-y) 3)
+  (set! (-> obj discord-rpc?) #t)
+  (set! (-> obj cells-needed-to-warp) 1.0)
+  (set! (-> obj checkpoint-randomizer?) #t)
+  (set! (-> obj window-lock?) #t)
+ 
+  (reset-gfx obj)
+  (reset-audio obj)
+  (reset-input obj)
+  (reset-ps2 obj)
+  (reset-misc obj)
+  (reset-extra obj)
+|#
+  (none))
+(defmethod write-to-file challenges-settings ((obj challenges-settings) (filename string))
+  "write settings to a file"
+ 
+  (if (not filename)
+    (return #f))
+ 
+    (let ((file (new 'stack 'file-stream filename 'write)))
+    (if (not (file-stream-valid? file))
+      (return #f))
+ 
+    (format file "(settings #x~X~%" (-> *pc-settings* version))
+ 
+    (format file "  (fps ~D)~%" (-> obj target-fps))
+    (format file "  (cells-needed-to-warp ~F)~%" (the-as float(-> obj cells-needed-to-warp)))
+    (format file "  (Randomizer? ~A)~%" (-> obj checkpoint-randomizer?))
+  #|(format file "  (game-size ~D ~D)~%" (-> obj width) (-> obj height))
+    (format file "  (window-size ~D ~D)~%" (-> obj win-width) (-> obj win-height))
+    (format file "  (aspect ~D ~D)~%" (-> obj width) (-> obj height))
+    (format file "  (aspect-test ~D ~D)~%" (-> obj aspect-custom-x) (-> obj aspect-custom-y))
+    (format file "  (aspect-auto ~A)~%" (-> obj aspect-ratio-auto?))
+    (format file "  (aspect-game ~A)~%" (-> *setting-control* default aspect-ratio))
+    (format file "  (video-mode ~A)~%" (-> *setting-control* default video-mode))
+    (format file "  (display-mode ~A)~%" (-> obj display-mode))
+    (format file "  (letterbox ~A)~%" (-> obj letterbox?))
+    (format file "  (vsync ~A)~%" (-> obj vsync?))
+    (format file "  (font-scale ~f)~%" (-> obj font-scale))
+ 
+    (format file "  (audio-latency-ms ~D)~%" (-> obj audio-latency-ms))
+    (format file "  (audio-pan-override ~f)~%" (-> obj audio-pan-override))
+    (format file "  (audio-volume-override ~f)~%" (-> obj audio-volume-override))
+    (format file "  (audio-channel-nb ~D)~%" (-> obj audio-channel-nb))
+ 
+    (format file "  (gfx-renderer ~D)~%" (-> obj gfx-renderer))
+    (format file "  (gfx-resolution ~f)~%" (-> obj gfx-resolution))
+    (format file "  (gfx-anisotropy ~f)~%" (-> obj gfx-anisotropy))
+    (format file "  (shrub-dist-mod ~f)~%" (-> obj shrub-dist-mod))
+    (format file "  (lod-dist-mod ~f)~%" (-> obj lod-dist-mod))
+    (format file "  (lod-force-tfrag ~D)~%" (-> obj lod-force-tfrag))
+    (format file "  (lod-force-tie ~D)~%" (-> obj lod-force-tie))
+    (format file "  (lod-force-ocean ~D)~%" (-> obj lod-force-ocean))
+    (format file "  (lod-force-actor ~D)~%" (-> obj lod-force-actor))
+ 
+    (format file "  (stick-deadzone ~f)~%" (-> obj stick-deadzone))
+ 
+    (format file "  (ps2-read-speed? ~A)~%" (-> obj ps2-read-speed?))
+    (format file "  (ps2-parts? ~A)~%" (-> obj ps2-parts?))
+    (format file "  (ps2-music? ~A)~%" (-> obj ps2-music?))
+    (format file "  (ps2-se? ~A)~%" (-> obj ps2-se?))
+    (format file "  (ps2-hints? ~A)~%" (-> obj ps2-hints?))
+    (format file "  (ps2-lod-dist? ~A)~%" (-> obj ps2-lod-dist?))
+    (format file "  (music-fade? ~A)~%" (-> obj music-fade?))
+    (format file "  (use-vis? ~A)~%" (-> obj use-vis?))
+    (format file "  (skip-movies? ~A)~%" (-> obj skip-movies?))
+    (format file "  (discord-rpc? ~A)~%" (-> obj discord-rpc?))
+    (format file "  (first-camera-h-inverted? ~A)~%" (-> obj first-camera-h-inverted?))
+    (format file "  (first-camera-v-inverted? ~A)~%" (-> obj first-camera-v-inverted?))
+    (format file "  (third-camera-h-inverted? ~A)~%" (-> obj third-camera-h-inverted?))
+    (format file "  (third-camera-v-inverted? ~A)~%" (-> obj third-camera-v-inverted?))
+    (format file "  (money-starburst? ~A)~%" (-> obj money-starburst?))
+    (format file "  (force-actors? ~A)~%" (-> obj force-actors?))
+    (format file "  (extra-hud? ~A)~%" (-> obj extra-hud?))
+    (format file "  (music-fadein? ~A)~%" (-> obj music-fadein?))
+    (format file "  (music-fadeout? ~A)~%" (-> obj music-fadeout?))
+    (format file "  (subtitles? ~A)~%" (-> obj subtitles?))
+    (format file "  (hinttitles? ~A)~%" (-> obj hinttitles?))
+    (format file "  (subtitle-language ~D)~%" (-> obj subtitle-language))
+    (format file "  (subtitle-speaker ~A)~%" (-> obj subtitle-speaker?))
+ 
+    #|
+    (format file "  (scenes-seen")
+    (dotimes (i PC_SPOOL_LOG_LENGTH)
+      (if (zero? (mod i 16))
+        (format file "~%   ")
+        )
+      (format file " ~D" (-> obj scenes-seen i))
+      )
+    (format file "~%    )~%")
+    |#
+ 
+  #|(format file "  (secrets~%")
+    #|
+    (format file "    (art #x~X)~%" (-> obj secrets art))
+    (format file "    (hard-rats? ~A)~%" (-> obj secrets hard-rats?))
+    (format file "    (hero-mode? ~A)~%" (-> obj secrets hero-mode?))
+    (format file "    (hud-map? ~A)~%" (-> obj secrets hud-map?))
+    (format file "    (hud-counters? ~A)~%" (-> obj secrets hud-counters?))
+    (format file "    (hard-fish-hiscore ~D)~%" (-> obj secrets hard-fish-hiscore))
+    (format file "    (hard-rats-hiscore ~D)~%" (-> obj secrets hard-rats-hiscore))
+    (format file "    (hard-rats-hiwave ~D)~%" (-> obj secrets hard-rats-hiwave))
+    |#
+ 
+  #|  (format file "    (music~%")
+    (dotimes (i PC_MUSIC_LOG_LENGTH)
+      (if (-> obj secrets music i name)
+    (format file "      (~A #x~X)~%" (-> obj secrets music i name) (-> obj secrets music i flava-mask))
+    )
+      )
+ 
+    (format file "      )~%")
+ 
+    (format file "    )~%")
+|#
+    (format file "  )~%")
+    (file-stream-close file)
+    )
+ 
+  (format 0 "pc settings file write: ~A~%" filename)
+ 
+  #t
+  )
+ 
+ 
+  (defmethod commit-to-file challenges-settings ((obj challenges-settings))
+  "commits the current settings to the file"
+  ;; auto load settings if available
+ 
+  (format (clear *pc-temp-string-1*) "~S/Mods/challenges-settings.gc" *pc-settings-folder*)
+  (pc-mkdir-file-path *pc-temp-string-1*)
+  (write-to-file obj *pc-temp-string-1*)
+  (none))
+ 
+(defmethod update-from-os challenges-settings ((obj challenges-settings))
+  "Update settings from the C kernel to GOAL."
+ 
+  (set! (-> obj os) (pc-get-os))
+ 
+ 
+ 
+ 
+  (none))
+ 
+(defmethod update-to-os challenges-settings ((obj challenges-settings))
+  "Update settings from GOAL to the C kernel."
+ 
+ 
+ 
+ 
+ 
+ 
+  (none))
+ 
+ 
+  (defmethod update challenges-settings ((obj challenges-settings))
+  "Update settings to/from PC kernel. Call this at the start of every frame.
+   This will update things like the aspect-ratio, which will be used for graphics code later."
+ 
+  (update-from-os obj)
+  (update-to-os obj)
+ 
+  #|(when (not (-> obj use-vis?))
+    (set! (-> *video-parms* relative-x-scale) (-> obj aspect-ratio-reciprocal))
+    (set! (-> *video-parms* relative-x-scale-reciprical) (-> obj aspect-ratio-scale))
+    (set! (-> *font-default-matrix* vector 0 x) (-> *video-parms* relative-x-scale))
+    )
+ 
+  (cond
+    ((-> obj force-actors?)
+      ;; kinda overkill.
+      (set! (-> *ACTOR-bank* birth-dist) (meters 10000))
+      (set! (-> *ACTOR-bank* pause-dist) (meters 10000))
+      (set! (-> *ACTOR-bank* birth-max) 1000)
+      )
+    ((> (-> *ACTOR-bank* birth-dist) (meters 220)) ;; the original caps at 220m, exceeding that means it was using our hacks
+      (set! (-> *ACTOR-bank* birth-dist) (meters 220))
+      (set! (-> *ACTOR-bank* pause-dist) (meters 220))
+      ))
+ 
+  ;; cheats.
+  (update-cheats obj)
+  ;; music.
+  (update-music-log obj)
+|#
+ 
+  (none))
+
 ;; information about a cutscene. placeholder. TODO look at jak 2
 (deftype pc-scene-info (structure)
   ((name string)
@@ -405,12 +897,11 @@
   )
 
 (defconstant PC_TEMP_STRING_LEN 512)
-(define *pc-temp-string* (new 'global 'string PC_TEMP_STRING_LEN (the-as string #f)))
-(define *pc-settings* (the-as pc-settings #f))
-(define *randomizer-settings* (the-as randomizer-settings #f))
+
+
 (format 0 "PC kernel version: ~D.~D~%" PC_KERNEL_VERSION_MAJOR PC_KERNEL_VERSION_MINOR)
 
-(define *pc-temp-string-1* (new 'global 'string 2048 (the-as string #f)))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; resets
