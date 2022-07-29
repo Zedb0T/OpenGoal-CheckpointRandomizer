@@ -1375,7 +1375,7 @@
       (set! v1-1 (or (not *target*) (zero? (logand (-> *target* state-flags) (state-flags grabbed)))))
       )
     (sound-play "prec-button1" :pitch -1)
-    (if (not (and (enable-no-powercell-cutscenes)))
+    (if (not (and (-> *randomizer-settings* checkpoint-randomizer?) (-> *randomizer-settings* warp-on-cell?)))
     (begin
 
         (let ((gp-1 (get-process *default-dead-pool* snowcam #x4000)))

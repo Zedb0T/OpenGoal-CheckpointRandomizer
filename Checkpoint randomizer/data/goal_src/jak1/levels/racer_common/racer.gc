@@ -442,7 +442,13 @@
   (blocking-plane-spawn
     (the-as
       curve-control
-      (if (enable-unlock-citadel-door-no-cells)
+      (if (and 
+          (-> *randomizer-settings* checkpoint-randomizer?)
+          (or 
+            (= (-> *level* level 0 name) 'lavatube) 
+            (= (-> *level* level 0 name) 'citadel)
+          )
+        )
         ;; in randomizer, don't spawn the invisible wall between lavatube/citadel
         (-> obj path-target)
         ;; original logic

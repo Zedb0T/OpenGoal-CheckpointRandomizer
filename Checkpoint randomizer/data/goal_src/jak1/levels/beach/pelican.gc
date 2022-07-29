@@ -6,7 +6,7 @@
 ;; dgos: BEA, L1
 
 ;; DECOMP BEGINS
-(define-extern enable-pelcian-explode-punch (function symbol))
+
 (import "goal_src/jak1/import/pelican-ag.gc")
 
 (deftype pelican-bank (basic)
@@ -443,7 +443,7 @@
         object
         (cond
           ((= v1-0 'attack)
-           (if (or (enable-pelican-explode-punch) (= (-> arg3 param 1) 'explode))
+           (if (or (-> *randomizer-settings* checkpoint-randomizer?) (= (-> arg3 param 1) 'explode))
             (begin
               (let ((a0-2 (handle->process (-> self fuel-cell))))
                 (if a0-2
@@ -931,7 +931,7 @@
                                           )
                                      )
            )
-           (if (enable-pelcian-explode-punch)
+           (if (and (-> *randomizer-settings* checkpoint-randomizer?) (-> *randomizer-settings* warp-on-cell?))
             ;;This would be important in a no cutscenes as well.
               (go pelican-wait-at-end #t)
             )

@@ -10,12 +10,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define-extern randomizer-run-each-frame (function none))
 (define-extern jak-size-run-each-frame (function (none)))
-(define-extern mods-common-run-each-frame (function (none)))
 
 (defun runMods()
 (randomizer-run-each-frame)
 (jak-size-run-each-frame)
-(mods-common-run-each-frame)
 (none))
 
 (defun reset-all ()

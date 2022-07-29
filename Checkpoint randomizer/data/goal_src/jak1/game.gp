@@ -1922,10 +1922,9 @@
  "common-obs/collectables-part.gc"
  "game/projectiles.gc"
  "common-obs/baseplat.gc"
- "mods/mods-common.gc"
  "mods/checkpoint-randomizer.gc"
  "mods/jak-size.gc"
-
+ "mods/mods-common.gc"
  "common-obs/collectables.gc"
  "game/task/task-control.gc"
  "common-obs/process-taskable.gc"

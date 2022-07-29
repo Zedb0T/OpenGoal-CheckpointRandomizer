@@ -116,7 +116,7 @@
   (let ((v1-3 (current-status (-> obj tasks))))
     (and (or (= v1-3 (task-status need-reward-speech)) (= v1-3 (task-status invalid)))
          (or 
-          (enable-citadel-cutscene-skips)
+          (-> *randomizer-settings* checkpoint-randomizer?)
           (not (task-closed? (game-task citadel-sage-green) (task-status need-hint)))
          )
          )

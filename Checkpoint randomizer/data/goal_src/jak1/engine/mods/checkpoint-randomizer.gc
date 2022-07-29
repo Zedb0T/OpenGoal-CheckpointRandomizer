@@ -5,9 +5,9 @@
 ;; name in dgo: checkpoint-randomizer
 ;; dgos: GAME, ENGINE
 
-(define *randomizer-version-string* "Rando 0.092")
+(define *randomizer-version-string* "Rando 0.091")
 (define *release-version-string* "Release 0.1.21")
-(define *comment-string* "Rework Modifications")
+(define *comment-string* "Rework cutscene skips")
 (define *checkpoint-list* (the-as (array string) (new
                                              'static
                                              'boxed-array
@@ -88,7 +88,8 @@
 
 ;; collectable-interval serves as a counter, it counts up until it is raul to collectables-needed-to-warp, then it warps jak and resets itself to count again
 (define *collectable-interval* 0.0)
-
+(define racer? #f) 
+(define flutflut? #f)
 (define *randomizer-items-collected* 0)
 
 (defun citadelCheck? ((checkpointName string))
@@ -112,10 +113,6 @@
 )
 
 (defun randomizer-run-each-frame ()
-;;Randomzier stuff that needs to run constantly
-(if (-> *randomizer-settings* checkpoint-randomizer?)
-(begin
-
 ;;update the number of items they have collected
    (set! *randomizer-items-collected*
    (+
@@ -125,8 +122,74 @@
       )
    )
 
+;;Randomzier stuff that needs to run constantly
+(if (-> *randomizer-settings* checkpoint-randomizer?)
+(begin
+
+;;Skip the keira zoomer cutscenes if the player has 20 or more cells, or if they have collected the end cell.
+(if (or (>= (-> *game-info* fuel) 20) (task-complete? *game-info* (game-task firecanyon-end)) )
+(begin
+  (close-specific-task! (game-task firecanyon-assistant) (task-status need-reward-speech))
+))
+(if (or (>= (-> *game-info* fuel) 20) (task-complete? *game-info* (game-task lavatube-end)) )
+(begin
+  (close-specific-task! (game-task lavatube-start) (task-status need-reward-speech))
+))
+
+;;Skip the samos cutscenes if the randomizer is on. Cutscenes bad.
+(close-specific-task! (game-task intro) (task-status need-resolution))
+(close-specific-task! (game-task beach-ecorocks) (task-status need-introduction))
+
+;;Unlock citadel door if the randomizer is on. Invis wall is removed elsewhere (racer.gc). Softlocks bad.
+(if (entity-by-name "citb-iris-door-21")
+  ;; rather than trigger the warp gate switch at end of lava tube with:
+  ;;    (close-specific-task! (game-task village4-button) (task-status need-hint))
+  ;;
+  ;; we break the link between the citadel door's state and the warp gate switch, 
+  ;; and then manually open the door
+  (let ((citb-iris-door-21 (the eco-door (-> (entity-by-name "citb-iris-door-21") extra process))))
+    (set! (-> citb-iris-door-21 state-actor) #f)
+    (set! (-> citb-iris-door-21 locked) #f) 
+  )
+)
+
+;;Skip the citadel cutscenes if the randomizer is on. Cutscenes bad.
+
+(close-specific-task! (game-task citadel-sage-green) (task-status need-resolution))
+(close-specific-task! (game-task citadel-sage-yellow) (task-status need-resolution))
+(close-specific-task! (game-task citadel-sage-red) (task-status need-resolution))
+(close-specific-task! (game-task citadel-sage-blue) (task-status need-resolution))
 
 
+(set! racer? (aif *target* (case (-> it next-state name) (
+                                      ('target-racing
+                                       'target-racing-bounce
+                                       'target-racing-death
+                                       'target-racing-falling
+                                       'target-racing-grab
+                                       'target-racing-hit
+                                       'target-racing-jump
+                                       'target-racing-smack
+                                       'target-racing-start) #t))))
+    (set! flutflut? (aif *target* (case (-> it next-state name) (
+                                      ('target-flut-air-attack
+                                       'target-flut-air-attack-hit-ground
+                                       'target-flut-double-jump
+                                       'target-flut-falling
+                                       'target-flut-grab
+                                       'target-flut-hit
+                                       'target-flut-hit-ground
+                                       'target-flut-jump
+                                       'target-flut-running-attack
+                                       'target-flut-stance
+                                       'target-flut-start
+                                       'target-flut-walk) #t))))
+
+  (if (string= (symbol->string (-> (level-get-target-inside *level*) name)) "training")
+(set! (-> *game-info* current-continue) (the-as continue-point (get-continue-by-name *game-info* "game-start")))
+    (none)
+  
+  )
 
   ;;clean *stdcon*
   (clear *stdcon*)
