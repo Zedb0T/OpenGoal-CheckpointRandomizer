@@ -443,7 +443,7 @@
         object
         (cond
           ((= v1-0 'attack)
-           (if (or (enable-pelcian-explode-punch) (= (-> arg3 param 1) 'explode))
+           (if (or (enable-pelican-explode-punch) (= (-> arg3 param 1) 'explode))
             (begin
               (let ((a0-2 (handle->process (-> self fuel-cell))))
                 (if a0-2
